@@ -45,7 +45,7 @@ export const experience: ExperienceEntry[] = [
   {
     role: "Role",
     company: "Company",
-    period: "Time period",
+    period: "Period",
     description: "Description",
   },
 ];
@@ -53,8 +53,8 @@ export const experience: ExperienceEntry[] = [
 export const education: EducationEntry[] = [
   {
     degree: "Degree",
-    institution: "Intitution",
-    period: "Time period",
+    institution: "Institution",
+    period: "Period",
   },
 ];
 
