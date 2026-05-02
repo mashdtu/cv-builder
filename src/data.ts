@@ -10,11 +10,20 @@ export interface ExperienceEntry {
   description: string;
 }
 
+export interface CourseEntry {
+  number: string;
+  name: string;
+  ects: string;
+  grade: string;
+}
+
 export interface EducationEntry {
   degree: string;
   institution: string;
   period: string;
   description?: string;
+  courses?: CourseEntry[];
+  showCourseSummary?: boolean;
 }
 
 export interface Header {

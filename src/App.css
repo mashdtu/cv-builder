@@ -484,6 +484,80 @@ label.edit-toolbar-btn {
   font-family: var(--heading);
 }
 
+/* Courses */
+.cv-courses {
+  margin-top: 4px;
+}
+.cv-courses-label {
+  display: block;
+  font-size: 11px;
+  font-family: var(--heading);
+  color: var(--text);
+  opacity: 0.6;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.cv-courses-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  margin-top: 4px;
+}
+.cv-courses-table th,
+.cv-courses-table td {
+  text-align: left;
+  padding: 3px 8px 3px 0;
+  border-bottom: 1px solid var(--accent-border);
+}
+.cv-courses-table th {
+  font-family: var(--heading);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  opacity: 0.6;
+  font-weight: 600;
+}
+.cv-courses-summary td {
+  font-weight: 600;
+  border-top: 2px solid var(--accent-border);
+  border-bottom: none;
+  font-family: var(--heading);
+}
+.cv-courses-summary-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  margin-top: 6px;
+  opacity: 0.7;
+  cursor: pointer;
+}
+.cv-courses-edit-header,
+.cv-courses-edit-row {
+  display: grid;
+  grid-template-columns: 60px 1fr 60px 60px 24px;
+  gap: 4px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.cv-courses-edit-header {
+  font-size: 11px;
+  font-family: var(--heading);
+  opacity: 0.6;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 2px;
+}
+.cv-courses-num,
+.cv-courses-ects,
+.cv-courses-grade {
+  width: 100%;
+}
+.cv-courses-name {
+  width: 100%;
+}
+
 /* Skills / Tags */
 .cv-skills {
   list-style: none;

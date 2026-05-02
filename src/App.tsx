@@ -240,6 +240,24 @@ function App() {
           );
           if (e.period) lines.push(`*${e.period}*`);
           if (e.description) lines.push(`\n${e.description}`);
+          if (e.courses && e.courses.some((c) => c.name.trim())) {
+            lines.push(`\n| # | Course | ECTS | Grade |`);
+            lines.push(`| --- | --- | --- | --- |`);
+            for (const c of e.courses)
+              if (c.name.trim())
+                lines.push(`| ${c.number} | ${c.name} | ${c.ects} | ${c.grade} |`);
+            if (e.showCourseSummary) {
+              const filled = e.courses.filter((c) => c.name.trim());
+              const totalEcts = filled.reduce((sum, c) => {
+                const n = parseFloat(c.ects); return sum + (isNaN(n) ? 0 : n);
+              }, 0);
+              const graded = filled.filter((c) => !isNaN(parseFloat(c.grade)) && !isNaN(parseFloat(c.ects)));
+              const weightedSum = graded.reduce((sum, c) => sum + parseFloat(c.grade) * parseFloat(c.ects), 0);
+              const weightedEcts = graded.reduce((sum, c) => sum + parseFloat(c.ects), 0);
+              const gpa = weightedEcts > 0 ? weightedSum / weightedEcts : null;
+              lines.push(`| | **Total** | **${totalEcts}** | **${gpa !== null ? gpa.toFixed(2) : "—"}** |`);
+            }
+          }
         }
       }
 
@@ -859,6 +877,203 @@ function App() {
                         />
                       ) : (
                         e.description && <p>{e.description}</p>
+                      )}
+                      {(editing || (e.courses && e.courses.some((c) => c.name.trim()))) && (
+                        <div className="cv-courses">
+                          {!editing && e.courses && e.courses.some((c) => c.name.trim()) && (
+                            <table className="cv-courses-table">
+                              <thead>
+                                <tr>
+                                  <th>#</th>
+                                  <th>Course</th>
+                                  <th>ECTS</th>
+                                  <th>Grade</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {e.courses.filter((c) => c.name.trim()).map((c, ci) => (
+                                  <tr key={ci}>
+                                    <td>{c.number}</td>
+                                    <td>{c.name}</td>
+                                    <td>{c.ects}</td>
+                                    <td>{c.grade}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                              {e.showCourseSummary && (() => {
+                                const filled = e.courses!.filter((c) => c.name.trim());
+                                const totalEcts = filled.reduce((sum, c) => {
+                                  const n = parseFloat(c.ects);
+                                  return sum + (isNaN(n) ? 0 : n);
+                                }, 0);
+                                const graded = filled.filter((c) => !isNaN(parseFloat(c.grade)) && !isNaN(parseFloat(c.ects)));
+                                const weightedSum = graded.reduce((sum, c) => sum + parseFloat(c.grade) * parseFloat(c.ects), 0);
+                                const weightedEcts = graded.reduce((sum, c) => sum + parseFloat(c.ects), 0);
+                                const gpa = weightedEcts > 0 ? weightedSum / weightedEcts : null;
+                                return (
+                                  <tfoot>
+                                    <tr className="cv-courses-summary">
+                                      <td colSpan={2}>Total</td>
+                                      <td>{totalEcts}</td>
+                                      <td>{gpa !== null ? gpa.toFixed(2) : "—"}</td>
+                                    </tr>
+                                  </tfoot>
+                                );
+                              })()}
+                            </table>
+                          )}
+                          {editing && (
+                            <>
+                              <span className="cv-courses-label">Courses</span>
+                              {(e.courses ?? []).length > 0 && (
+                                <div className="cv-courses-edit-header">
+                                  <span>#</span>
+                                  <span>Name</span>
+                                  <span>ECTS</span>
+                                  <span>Grade</span>
+                                  <span />
+                                </div>
+                              )}
+                              {(e.courses ?? []).map((course, ci) => (
+                                <div key={ci} className="cv-courses-edit-row">
+                                  <input
+                                    className="edit-inline cv-courses-num"
+                                    value={course.number}
+                                    onChange={(v) =>
+                                      setEdu((x) =>
+                                        x.map((r, j) =>
+                                          j === i
+                                            ? {
+                                                ...r,
+                                                courses: (r.courses ?? []).map(
+                                                  (c, k) =>
+                                                    k === ci ? { ...c, number: v.target.value } : c,
+                                                ),
+                                              }
+                                            : r,
+                                        ),
+                                      )
+                                    }
+                                    placeholder="#"
+                                  />
+                                  <input
+                                    className="edit-inline cv-courses-name"
+                                    value={course.name}
+                                    onChange={(v) =>
+                                      setEdu((x) =>
+                                        x.map((r, j) =>
+                                          j === i
+                                            ? {
+                                                ...r,
+                                                courses: (r.courses ?? []).map(
+                                                  (c, k) =>
+                                                    k === ci ? { ...c, name: v.target.value } : c,
+                                                ),
+                                              }
+                                            : r,
+                                        ),
+                                      )
+                                    }
+                                    placeholder="Course name"
+                                  />
+                                  <input
+                                    className="edit-inline cv-courses-ects"
+                                    value={course.ects}
+                                    onChange={(v) =>
+                                      setEdu((x) =>
+                                        x.map((r, j) =>
+                                          j === i
+                                            ? {
+                                                ...r,
+                                                courses: (r.courses ?? []).map(
+                                                  (c, k) =>
+                                                    k === ci ? { ...c, ects: v.target.value } : c,
+                                                ),
+                                              }
+                                            : r,
+                                        ),
+                                      )
+                                    }
+                                    placeholder="ECTS"
+                                  />
+                                  <input
+                                    className="edit-inline cv-courses-grade"
+                                    value={course.grade}
+                                    onChange={(v) =>
+                                      setEdu((x) =>
+                                        x.map((r, j) =>
+                                          j === i
+                                            ? {
+                                                ...r,
+                                                courses: (r.courses ?? []).map(
+                                                  (c, k) =>
+                                                    k === ci ? { ...c, grade: v.target.value } : c,
+                                                ),
+                                              }
+                                            : r,
+                                        ),
+                                      )
+                                    }
+                                    placeholder="Grade"
+                                  />
+                                  <button
+                                    className="edit-remove-icon"
+                                    onClick={() =>
+                                      setEdu((x) =>
+                                        x.map((r, j) =>
+                                          j === i
+                                            ? {
+                                                ...r,
+                                                courses: (r.courses ?? []).filter(
+                                                  (_, k) => k !== ci,
+                                                ),
+                                              }
+                                            : r,
+                                        ),
+                                      )
+                                    }>
+                                    <X size={10} />
+                                  </button>
+                                </div>
+                              ))}
+                              <button
+                                className="edit-add-inline"
+                                onClick={() =>
+                                  setEdu((x) =>
+                                    x.map((r, j) =>
+                                      j === i
+                                        ? {
+                                            ...r,
+                                            courses: [
+                                              ...(r.courses ?? []),
+                                              { number: "", name: "", ects: "", grade: "" },
+                                            ],
+                                          }
+                                        : r,
+                                    ),
+                                  )
+                                }>
+                                <Plus size={12} /> Add course
+                              </button>
+                              <label className="cv-courses-summary-toggle">
+                                <input
+                                  type="checkbox"
+                                  checked={e.showCourseSummary ?? false}
+                                  onChange={(v) =>
+                                    setEdu((x) =>
+                                      x.map((r, j) =>
+                                        j === i
+                                          ? { ...r, showCourseSummary: v.target.checked }
+                                          : r,
+                                      ),
+                                    )
+                                  }
+                                />
+                                Show totals row
+                              </label>
+                            </>
+                          )}
+                        </div>
                       )}
                     </div>
                   ))}
