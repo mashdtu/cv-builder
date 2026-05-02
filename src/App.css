@@ -488,6 +488,39 @@ label.edit-toolbar-btn {
 .cv-courses {
   margin-top: 4px;
 }
+.cv-courses-toggle {
+  background: none;
+  border: none;
+  padding: 2px 0;
+  margin: 4px 0;
+  font-size: 12.5px;
+  font-family: var(--heading);
+  color: var(--accent);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 0.85;
+}
+.cv-courses-toggle:hover {
+  opacity: 1;
+}
+.cv-courses-wrap {
+  position: relative;
+}
+.cv-courses-wrap--clipped {
+  overflow: hidden;
+}
+.cv-courses-wrap--clipped::after {
+  content: "";
+  position: absolute;
+  bottom: 28px;
+  left: 0;
+  right: 0;
+  height: 56px;
+  background: linear-gradient(to bottom, transparent, var(--bg, #fff));
+  pointer-events: none;
+}
 .cv-courses-label {
   display: block;
   font-size: 11px;
