@@ -184,14 +184,17 @@ document.addEventListener('DOMContentLoaded', function () {
     var tableWrap = wrap.querySelector('.cv-courses-table-wrap');
     if (!tbody || !btn) return;
     var rows = Array.from(tbody.querySelectorAll('tr'));
+    var tfoot = wrap.querySelector('tfoot');
     if (rows.length <= PREVIEW) return;
     rows.slice(PREVIEW).forEach(function (r) { r.style.display = 'none'; });
+    if (tfoot) tfoot.style.display = 'none';
     if (tableWrap) tableWrap.classList.add('cv-courses-table-wrap--fading');
     btn.textContent = btn.dataset.labelMore;
     var expanded = false;
     btn.addEventListener('click', function () {
       expanded = !expanded;
       rows.slice(PREVIEW).forEach(function (r) { r.style.display = expanded ? '' : 'none'; });
+      if (tfoot) tfoot.style.display = expanded ? '' : 'none';
       if (tableWrap) tableWrap.classList.toggle('cv-courses-table-wrap--fading', !expanded);
       btn.textContent = expanded ? btn.dataset.labelLess : btn.dataset.labelMore;
     });
