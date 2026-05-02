@@ -508,13 +508,26 @@ label.edit-toolbar-btn {
 .cv-courses-wrap {
   position: relative;
 }
-.cv-courses-wrap--clipped {
-  overflow: hidden;
+.cv-courses-table-wrap {
+  position: relative;
 }
-.cv-courses-wrap--clipped::after {
+.cv-courses-table-wrap--fading::after {
   content: "";
   position: absolute;
-  bottom: 28px;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 56px;
+  background: linear-gradient(to bottom, transparent, var(--bg, #fff));
+  pointer-events: none;
+}
+.cv-courses-table-wrap--clipped {
+  overflow: hidden;
+}
+.cv-courses-table-wrap--clipped::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
   left: 0;
   right: 0;
   height: 56px;

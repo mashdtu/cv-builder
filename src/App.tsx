@@ -155,7 +155,10 @@ function App() {
 
   function buildCleanHTML() {
     const wasEditing = editing;
+    const prevExpanded = expandedCourses;
     if (wasEditing) flushSync(() => setEditing(false));
+    // Expand all education entries so all course rows are in the DOM
+    flushSync(() => setExpandedCourses(new Set(edu.map((_, i) => i))));
     const styles = Array.from(document.styleSheets)
       .flatMap((sheet) => {
         try {
@@ -168,8 +171,34 @@ function App() {
     const cvEl = document.querySelector(".cv") as HTMLElement;
     const clone = cvEl.cloneNode(true) as HTMLElement;
     clone.querySelector(".edit-toolbar")?.remove();
+    // Restore state
+    flushSync(() => setExpandedCourses(prevExpanded));
     if (wasEditing) setEditing(true);
-    return `<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width,initial-scale=1.0">\n<title></title>\n<style>body{margin:0}\n${styles}</style>\n</head>\n<body><div id="root">${clone.outerHTML}</div></body>\n</html>`;
+    const script = `
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var PREVIEW = 4;
+  document.querySelectorAll('.cv-courses-wrap').forEach(function (wrap) {
+    var tbody = wrap.querySelector('tbody');
+    var btn = wrap.querySelector('.cv-courses-toggle');
+    var tableWrap = wrap.querySelector('.cv-courses-table-wrap');
+    if (!tbody || !btn) return;
+    var rows = Array.from(tbody.querySelectorAll('tr'));
+    if (rows.length <= PREVIEW) return;
+    rows.slice(PREVIEW).forEach(function (r) { r.style.display = 'none'; });
+    if (tableWrap) tableWrap.classList.add('cv-courses-table-wrap--fading');
+    btn.textContent = btn.dataset.labelMore;
+    var expanded = false;
+    btn.addEventListener('click', function () {
+      expanded = !expanded;
+      rows.slice(PREVIEW).forEach(function (r) { r.style.display = expanded ? '' : 'none'; });
+      if (tableWrap) tableWrap.classList.toggle('cv-courses-table-wrap--fading', !expanded);
+      btn.textContent = expanded ? btn.dataset.labelLess : btn.dataset.labelMore;
+    });
+  });
+});
+<\/script>`;
+    return `<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width,initial-scale=1.0">\n<title></title>\n<style>body{margin:0}\n${styles}</style>\n</head>\n<body><div id="root">${clone.outerHTML}</div>${script}</body>\n</html>`;
   }
 
   function exportPDF() {
@@ -890,49 +919,53 @@ function App() {
                                 const visible = expanded ? filled : filled.slice(0, PREVIEW);
                                 const hasMore = filled.length > PREVIEW;
                                 return (
-                                  <div className={`cv-courses-wrap${!expanded && hasMore ? " cv-courses-wrap--clipped" : ""}`}>
-                                    <table className="cv-courses-table">
-                                      <thead>
-                                        <tr>
-                                          <th>#</th>
-                                          <th>Course</th>
-                                          <th>ECTS</th>
-                                          <th>Grade</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {visible.map((c, ci) => (
-                                          <tr key={ci}>
-                                            <td>{c.number}</td>
-                                            <td>{c.name}</td>
-                                            <td>{c.ects}</td>
-                                            <td>{c.grade}</td>
+                                  <div className="cv-courses-wrap">
+                                    <div className={`cv-courses-table-wrap${!expanded && hasMore ? " cv-courses-table-wrap--fading" : ""}`}>
+                                      <table className="cv-courses-table">
+                                        <thead>
+                                          <tr>
+                                            <th>#</th>
+                                            <th>Course</th>
+                                            <th>ECTS</th>
+                                            <th>Grade</th>
                                           </tr>
-                                        ))}
-                                      </tbody>
-                                      {(expanded || !hasMore) && e.showCourseSummary && (() => {
-                                        const totalEcts = filled.reduce((sum, c) => {
-                                          const n = parseFloat(c.ects);
-                                          return sum + (isNaN(n) ? 0 : n);
-                                        }, 0);
-                                        const graded = filled.filter((c) => !isNaN(parseFloat(c.grade)) && !isNaN(parseFloat(c.ects)));
-                                        const weightedSum = graded.reduce((sum, c) => sum + parseFloat(c.grade) * parseFloat(c.ects), 0);
-                                        const weightedEcts = graded.reduce((sum, c) => sum + parseFloat(c.ects), 0);
-                                        const gpa = weightedEcts > 0 ? weightedSum / weightedEcts : null;
-                                        return (
-                                          <tfoot>
-                                            <tr className="cv-courses-summary">
-                                              <td colSpan={2}>Total</td>
-                                              <td>{totalEcts}</td>
-                                              <td>{gpa !== null ? gpa.toFixed(2) : "—"}</td>
+                                        </thead>
+                                        <tbody>
+                                          {visible.map((c, ci) => (
+                                            <tr key={ci}>
+                                              <td>{c.number}</td>
+                                              <td>{c.name}</td>
+                                              <td>{c.ects}</td>
+                                              <td>{c.grade}</td>
                                             </tr>
-                                          </tfoot>
-                                        );
-                                      })()}
-                                    </table>
+                                          ))}
+                                        </tbody>
+                                        {(expanded || !hasMore) && e.showCourseSummary && (() => {
+                                          const totalEcts = filled.reduce((sum, c) => {
+                                            const n = parseFloat(c.ects);
+                                            return sum + (isNaN(n) ? 0 : n);
+                                          }, 0);
+                                          const graded = filled.filter((c) => !isNaN(parseFloat(c.grade)) && !isNaN(parseFloat(c.ects)));
+                                          const weightedSum = graded.reduce((sum, c) => sum + parseFloat(c.grade) * parseFloat(c.ects), 0);
+                                          const weightedEcts = graded.reduce((sum, c) => sum + parseFloat(c.ects), 0);
+                                          const gpa = weightedEcts > 0 ? weightedSum / weightedEcts : null;
+                                          return (
+                                            <tfoot>
+                                              <tr className="cv-courses-summary">
+                                                <td colSpan={2}>Total</td>
+                                                <td>{totalEcts}</td>
+                                                <td>{gpa !== null ? gpa.toFixed(2) : "—"}</td>
+                                              </tr>
+                                            </tfoot>
+                                          );
+                                        })()}
+                                      </table>
+                                    </div>
                                     {hasMore && (
                                       <button
                                         className="cv-courses-toggle"
+                                        data-label-more={`▸ Show all ${filled.length} courses`}
+                                        data-label-less="▾ Show less"
                                         onClick={() =>
                                           setExpandedCourses((prev) => {
                                             const next = new Set(prev);
