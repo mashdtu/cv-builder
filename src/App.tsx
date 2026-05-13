@@ -153,7 +153,7 @@ function App() {
     e.target.value = "";
   }
 
-  function buildCleanHTML() {
+  function buildCleanHTML(forPrint = false) {
     const wasEditing = editing;
     const prevExpanded = expandedCourses;
     if (wasEditing) flushSync(() => setEditing(false));
@@ -201,11 +201,11 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 });
 <\/script>`;
-    return `<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width,initial-scale=1.0">\n<title></title>\n<style>body{margin:0}\n${styles}</style>\n</head>\n<body><div id="root">${clone.outerHTML}</div>${script}</body>\n</html>`;
+    return `<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width,initial-scale=1.0">\n<title></title>\n<style>body{margin:0}\n${styles}</style>\n</head>\n<body><div id="root">${clone.outerHTML}</div>${forPrint ? '' : script}</body>\n</html>`;
   }
 
   function exportPDF() {
-    const html = buildCleanHTML();
+    const html = buildCleanHTML(true);
     const win = window.open("", "_blank");
     if (win) {
       win.document.open();
