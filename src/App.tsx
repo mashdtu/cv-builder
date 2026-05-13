@@ -107,6 +107,138 @@ function formatDirectAvg(avg: number, scale: GradeScale): string {
   return avg.toFixed(2);
 }
 
+// Official Danish grade → GPA lookup table
+const DANISH_GPA: Array<[number, number]> = [
+  [-3, 0.0], [0, 0.0], [2, 1.0], [4, 2.0], [7, 3.0], [10, 3.7], [12, 4.0],
+];
+function danishToGpaNum(grade: string): number | null {
+  const g = parseFloat(grade);
+  if (isNaN(g)) return null;
+  const entry = DANISH_GPA.find(([d]) => d >= g);
+  return entry ? entry[1] : 4.0;
+}
+
+// GPA value → percentage (upper bound of each GPA bin)
+function gpaToPercent(gpa: number): number {
+  if (gpa <= 0) return 0;
+  if (gpa < 1.0) return 59;
+  const steps: [number, number][] = [[1.0,66],[1.3,69],[1.7,72],[2.0,76],[2.3,79],[2.7,83],[3.0,86],[3.3,89],[3.7,93],[4.0,100]];
+  return (steps.find(([g]) => g >= gpa) ?? steps[steps.length - 1])[1];
+}
+
+// Convert a grade directly between scales, using Danish→GPA direct lookup where possible.
+function convertGrade(
+  grade: string,
+  fromScale: GradeScale,
+  fromScaleMax: string | undefined,
+  toScale: Exclude<GradeScale, "none">,
+  toScaleMax: string | undefined,
+): string {
+  if (fromScale === "danish") {
+    const g = parseFloat(grade);
+    if (isNaN(g)) return "";
+    if (toScale === "gpa") return (danishToGpaNum(grade) ?? 0).toFixed(2);
+    if (toScale === "percent") {
+      if (g <= -3) return "0.0%";
+      const pctSteps: [number, number][] = [[0,30],[2,65],[4,72],[7,83],[10,93],[12,100]];
+      const found = pctSteps.find(([d]) => d >= g) ?? pctSteps[pctSteps.length - 1];
+      return found[1].toFixed(1) + "%";
+    }
+    const gpaVal = danishToGpaNum(grade);
+    if (gpaVal === null) return "";
+    return percentToGrade(gpaToPercent(gpaVal), toScale, toScaleMax);
+  }
+  const pct = gradeToPercentNum(grade, fromScale, fromScaleMax);
+  if (pct === null) return "";
+  return percentToGrade(pct, toScale, toScaleMax);
+}
+
+// Compute extra column average by averaging in input space then converting once.
+function computeColAvg(
+  courses: { grade: string; ects: string }[],
+  fromScale: GradeScale,
+  fromScaleMax: string | undefined,
+  col: GradeColumn,
+  mode: SummaryMode,
+): string {
+  const toScale = col.scale;
+  if (fromScale === "danish" || fromScale === "gpa" || fromScale === "percent" || fromScale === "linear") {
+    const vals = courses
+      .map((c) => ({ val: parseFloat(c.grade), ects: parseFloat(c.ects) }))
+      .filter((x) => !isNaN(x.val));
+    if (vals.length === 0) return "—";
+    const simple = vals.reduce((s, x) => s + x.val, 0) / vals.length;
+    const withEcts = vals.filter((x) => !isNaN(x.ects) && x.ects > 0);
+    const weighted = withEcts.length > 0
+      ? withEcts.reduce((s, x) => s + x.val * x.ects, 0) / withEcts.reduce((s, x) => s + x.ects, 0)
+      : null;
+    const avg = mode === "simple" ? simple : mode === "weighted" ? (weighted ?? simple) : Math.max(simple, weighted ?? simple);
+    if (fromScale === "danish") {
+      const pts = DANISH_GPA;
+      let gpa: number;
+      if (avg <= pts[0][0]) gpa = pts[0][1];
+      else if (avg >= pts[pts.length - 1][0]) gpa = pts[pts.length - 1][1];
+      else { const hi = pts.findIndex(([d]) => d >= avg); const lo = pts[hi-1], h = pts[hi]; gpa = lo[1] + (avg - lo[0]) / (h[0] - lo[0]) * (h[1] - lo[1]); }
+      if (toScale === "gpa") return gpa.toFixed(2);
+      return percentToGrade(gpaToPercent(gpa), toScale, col.scaleMax);
+    }
+    let pct: number;
+    if (fromScale === "percent") pct = avg;
+    else if (fromScale === "gpa") pct = gpaToPercent(avg);
+    else { const max = parseFloat(fromScaleMax ?? "10"); if (isNaN(max) || max === 0) return "—"; pct = (avg / max) * 100; }
+    if (toScale === "percent") return pct.toFixed(1) + "%";
+    if (toScale === "gpa") {
+      const pts: [number,number][] = [[0,0.0],[60,1.0],[67,1.3],[70,1.7],[73,2.0],[77,2.3],[80,2.7],[83,3.0],[87,3.3],[90,3.7],[94,4.0],[100,4.0]];
+      if (pct <= 0) return "0.00"; if (pct >= 100) return "4.00";
+      const hi = pts.findIndex(([p]) => p >= pct); const lo = pts[hi-1], h = pts[hi];
+      return (lo[1] + (pct - lo[0]) / (h[0] - lo[0]) * (h[1] - lo[1])).toFixed(2);
+    }
+    return percentToGrade(pct, toScale, col.scaleMax);
+  }
+  const entries = courses
+    .map((c) => ({ val: gradeToPercentNum(c.grade, fromScale, fromScaleMax), ects: parseFloat(c.ects) }))
+    .filter((x): x is { val: number; ects: number } => x.val !== null);
+  if (entries.length === 0) return "—";
+  const simple = entries.reduce((s, x) => s + x.val, 0) / entries.length;
+  const withEcts = entries.filter((x) => !isNaN(x.ects) && x.ects > 0);
+  const weighted = withEcts.length > 0
+    ? withEcts.reduce((s, x) => s + x.val * x.ects, 0) / withEcts.reduce((s, x) => s + x.ects, 0)
+    : null;
+  const avg = mode === "simple" ? simple : mode === "weighted" ? (weighted ?? simple) : Math.max(simple, weighted ?? simple);
+  if (toScale === "percent") return avg.toFixed(1) + "%";
+  return percentToGrade(avg, toScale, col.scaleMax);
+}
+
+// Grade → red/yellow/green hsl colour, scale-aware.
+function gradeColor(grade: string, scale: GradeScale, scaleMax?: string): string | undefined {
+  let hue: number;
+  if (scale === "danish") {
+    const g = parseFloat(grade);
+    if (isNaN(g)) return undefined;
+    if (g <= 0) return "hsl(0, 70%, 40%)";
+    hue = 60 + Math.min(1, (g - 2) / (12 - 2)) * 60;
+  } else if (scale === "gpa") {
+    const g = parseFloat(grade);
+    if (isNaN(g)) return undefined;
+    if (g < 2.0) return "hsl(0, 70%, 40%)";
+    hue = 60 + Math.min(1, (g - 2.0) / 2.0) * 60;
+  } else if (scale === "ects") {
+    const passing = ["E", "D", "C", "B", "A"];
+    const g = grade.trim().toUpperCase();
+    if (!passing.includes(g)) return "hsl(0, 70%, 40%)";
+    hue = 60 + (passing.indexOf(g) / (passing.length - 1)) * 60;
+  } else if (scale === "percent") {
+    const g = parseFloat(grade);
+    if (isNaN(g)) return undefined;
+    hue = Math.round(Math.min(24, Math.floor(g / 4)) / 24 * 120);
+  } else if (scale === "linear") {
+    const g = parseFloat(grade); const max = parseFloat(scaleMax ?? "10");
+    if (isNaN(g) || isNaN(max) || max === 0) return undefined;
+    hue = Math.round(Math.min(1, Math.max(0, g / max)) * 120);
+  } else { return undefined; }
+  return `hsl(${Math.round(hue)}, 70%, 40%)`;
+}
+
 function gradeToPercentNum(grade: string, scale: GradeScale, scaleMax?: string): number | null {
   if (scale === "none") return null;
   if (scale === "ects") {
@@ -117,11 +249,11 @@ function gradeToPercentNum(grade: string, scale: GradeScale, scaleMax?: string):
   const g = parseFloat(grade);
   if (isNaN(g)) return null;
   if (scale === "danish") {
-    // Upper bound of each Danish grade's percentage range
+    // Route through official Danish→GPA table, then GPA→%
     if (g <= -3) return 0;
-    const steps: [number, number][] = [[0, 49], [2, 59], [4, 69], [7, 79], [10, 89], [12, 100]];
-    const snapped = steps.find(([s]) => s >= g) ?? steps[steps.length - 1];
-    return snapped[1];
+    const gpaVal = danishToGpaNum(grade);
+    if (gpaVal === null) return null;
+    return gpaToPercent(gpaVal);
   }
   if (scale === "percent") return g;
   if (scale === "gpa") {
@@ -143,12 +275,12 @@ function gradeToPercentNum(grade: string, scale: GradeScale, scaleMax?: string):
 function percentToGrade(pct: number, scale: Exclude<GradeScale, "none">, scaleMax?: string): string {
   if (scale === "percent") return pct.toFixed(1) + "%";
   if (scale === "danish") {
-    if (pct >= 90) return "12";
-    if (pct >= 80) return "10";
-    if (pct >= 70) return "7";
-    if (pct >= 60) return "4";
-    if (pct >= 50) return "02";
-    if (pct >= 40) return "00";
+    if (pct >= 93) return "12";
+    if (pct >= 89) return "10";
+    if (pct >= 86) return "7";
+    if (pct >= 83) return "4";
+    if (pct >= 76) return "02";
+    if (pct > 0) return "00";
     return "-3";
   }
   if (scale === "ects") {
@@ -454,8 +586,8 @@ document.addEventListener('DOMContentLoaded', function () {
             for (const c of e.courses)
               if (c.name.trim()) {
                 const extraCells = cols.map((col) => {
-                  const pct = gradeToPercentNum(c.grade, e.gradeInputScale!, e.gradeInputScaleMax);
-                  return ` ${pct !== null ? percentToGrade(pct, col.scale, col.scaleMax) : ""} |`;
+                  const converted = convertGrade(c.grade, e.gradeInputScale!, e.gradeInputScaleMax, col.scale, col.scaleMax);
+                  return ` ${converted} |`;
                 }).join("");
                 lines.push(`| ${c.number} | ${c.name} | ${c.ects} | ${c.grade} |${extraCells}`);
               }
@@ -466,7 +598,6 @@ document.addEventListener('DOMContentLoaded', function () {
               }, 0);
               const mode = e.summaryMode ?? "weighted";
               const avgResult = computeAvgPct(filled, e.gradeInputScale ?? "none", e.gradeInputScaleMax, mode);
-              const avgPct = avgResult && !avgResult.isRaw ? avgResult.avg : null;
               const directAvg = computeDirectAvg(filled, e.gradeInputScale ?? "none", mode);
               const avgGradeStr = directAvg !== null
                 ? formatDirectAvg(directAvg, e.gradeInputScale!)
@@ -476,7 +607,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     : percentToGrade(avgResult.avg, e.gradeInputScale as Exclude<GradeScale, "none">, e.gradeInputScaleMax))
                   : "—";
               const extraSumCells = cols.map((col) =>
-                ` **${avgPct !== null ? percentToGrade(avgPct, col.scale, col.scaleMax) : "—"}** |`
+                ` **${computeColAvg(filled, e.gradeInputScale ?? "none", e.gradeInputScaleMax, col, mode)}** |`
               ).join("");
               lines.push(`| | **Total** | **${totalEcts}** | **${avgGradeStr}** |${extraSumCells}`);
             }
@@ -1146,10 +1277,10 @@ document.addEventListener('DOMContentLoaded', function () {
                                               <td>{c.number}</td>
                                               <td className="cv-col-ects">{c.ects}</td>
                                               <td>{c.name}</td>
-                                              <td className="cv-col-grade-first">{c.grade}</td>
+                                              <td className="cv-col-grade-first" style={{ color: e.colorGrades ? gradeColor(c.grade, e.gradeInputScale ?? "none", e.gradeInputScaleMax) : undefined, fontWeight: e.colorGrades ? 600 : undefined }}>{c.grade}</td>
                                               {cols.map((col, coli) => {
-                                                const pct = gradeToPercentNum(c.grade, e.gradeInputScale!, e.gradeInputScaleMax);
-                                                return <td key={coli}>{pct !== null ? percentToGrade(pct, col.scale, col.scaleMax) : ""}</td>;
+                                                const converted = convertGrade(c.grade, e.gradeInputScale!, e.gradeInputScaleMax, col.scale, col.scaleMax);
+                                                return <td key={coli} style={{ color: e.colorGrades && converted ? gradeColor(converted, col.scale, col.scaleMax) : undefined, fontWeight: e.colorGrades && converted ? 600 : undefined }}>{converted}</td>;
                                               })}
                                             </tr>
                                           ))}
@@ -1161,7 +1292,6 @@ document.addEventListener('DOMContentLoaded', function () {
                                           }, 0);
                                           const mode = e.summaryMode ?? "weighted";
                                           const avgResult = computeAvgPct(filled, e.gradeInputScale ?? "none", e.gradeInputScaleMax, mode);
-                                          const avgPct = avgResult && !avgResult.isRaw ? avgResult.avg : null;
                                           const directAvg = computeDirectAvg(filled, e.gradeInputScale ?? "none", mode);
                                           const avgGradeStr = directAvg !== null
                                             ? formatDirectAvg(directAvg, e.gradeInputScale!)
@@ -1177,10 +1307,11 @@ document.addEventListener('DOMContentLoaded', function () {
                                                 <td>Total</td>
                                                 <td>{totalEcts}</td>
                                                 <td />
-                                                <td>{avgGradeStr}</td>
-                                                {cols.map((col, coli) => (
-                                                  <td key={coli}>{avgPct !== null ? percentToGrade(avgPct, col.scale, col.scaleMax) : "—"}</td>
-                                                ))}
+                                                <td style={{ color: e.colorGrades && avgGradeStr !== "—" ? gradeColor(avgGradeStr, e.gradeInputScale as GradeScale ?? "none", e.gradeInputScaleMax) : undefined, fontWeight: e.colorGrades && avgGradeStr !== "—" ? 600 : undefined }}>{avgGradeStr}</td>
+                                                {cols.map((col, coli) => {
+                                                  const colAvg = computeColAvg(filled, e.gradeInputScale ?? "none", e.gradeInputScaleMax, col, mode);
+                                                  return <td key={coli} style={{ color: e.colorGrades && colAvg !== "—" ? gradeColor(colAvg, col.scale, col.scaleMax) : undefined, fontWeight: e.colorGrades && colAvg !== "—" ? 600 : undefined }}>{colAvg}</td>;
+                                                })}
                                               </tr>
                                             </tfoot>
                                           );
@@ -1374,6 +1505,22 @@ document.addEventListener('DOMContentLoaded', function () {
                                   }
                                 />
                                 Only show graded courses
+                              </label>
+                              <label className="cv-courses-summary-toggle">
+                                <input
+                                  type="checkbox"
+                                  checked={e.colorGrades ?? false}
+                                  onChange={(v) =>
+                                    setEdu((x) =>
+                                      x.map((r, j) =>
+                                        j === i
+                                          ? { ...r, colorGrades: v.target.checked }
+                                          : r,
+                                      ),
+                                    )
+                                  }
+                                />
+                                Color code grades
                               </label>
                               <label className="cv-courses-summary-toggle">
                                 <input

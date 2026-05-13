@@ -38,6 +38,7 @@ export interface EducationEntry {
   gradeInputScale?: GradeScale;
   gradeInputScaleMax?: string;
   gradeColumns?: GradeColumn[];
+  colorGrades?: boolean;
 }
 
 export interface Header {
