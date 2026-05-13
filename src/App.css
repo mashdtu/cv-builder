@@ -507,9 +507,14 @@ label.edit-toolbar-btn {
 }
 .cv-courses-wrap {
   position: relative;
+  overflow-anchor: none;
 }
 .cv-courses-table-wrap {
   position: relative;
+  overflow: hidden;
+}
+.cv-courses-table-wrap--fading {
+  max-height: calc(160px + var(--cv-thead-h, 0px));
 }
 .cv-courses-table-wrap--fading::after {
   content: "";
@@ -517,7 +522,7 @@ label.edit-toolbar-btn {
   bottom: 0;
   left: 0;
   right: 0;
-  height: 56px;
+  height: 40px;
   background: linear-gradient(to bottom, transparent, var(--bg, #fff));
   pointer-events: none;
 }
@@ -563,6 +568,19 @@ label.edit-toolbar-btn {
   letter-spacing: 0.4px;
   opacity: 0.6;
   font-weight: 600;
+  vertical-align: bottom;
+}
+.cv-courses-grade-group {
+  border-bottom: 1px solid var(--accent-border);
+  text-align: center !important;
+}
+.cv-courses-table th.cv-col-ects,
+.cv-courses-table td.cv-col-ects {
+  padding-right: 48px;
+}
+.cv-courses-table th.cv-col-grade-first,
+.cv-courses-table td.cv-col-grade-first {
+  padding-left: 0;
 }
 .cv-courses-summary td {
   font-weight: 600;
@@ -579,6 +597,46 @@ label.edit-toolbar-btn {
   opacity: 0.7;
   cursor: pointer;
 }
+.cv-courses-scale-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  margin-top: 6px;
+}
+.cv-courses-scale-label {
+  opacity: 0.7;
+  font-family: var(--heading);
+  white-space: nowrap;
+}
+.cv-courses-scale-select {
+  font-size: 12px;
+  font-family: var(--heading);
+  padding: 2px 4px;
+  border: 1px solid var(--accent-border);
+  border-radius: 3px;
+  background: var(--bg, #fff);
+  color: var(--text);
+  cursor: pointer;
+}
+.cv-courses-scale-max {
+  width: 70px;
+}
+.cv-courses-col-list {
+  margin-top: 4px;
+  padding-left: 8px;
+  border-left: 2px solid var(--accent-border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+}
+.cv-courses-col-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
 .cv-courses-edit-header,
 .cv-courses-edit-row {
   display: grid;
@@ -594,6 +652,18 @@ label.edit-toolbar-btn {
   text-transform: uppercase;
   letter-spacing: 0.4px;
   margin-bottom: 2px;
+}
+.cv-courses-edit-summary {
+  display: grid;
+  grid-template-columns: 60px 1fr 60px 60px 24px;
+  gap: 4px;
+  align-items: center;
+  margin-top: 2px;
+  padding-top: 4px;
+  border-top: 2px solid var(--accent-border);
+  font-size: 12px;
+  font-family: var(--heading);
+  font-weight: 600;
 }
 .cv-courses-num,
 .cv-courses-ects,

@@ -31,9 +31,162 @@ import {
   education as defaultEducation,
   type ExperienceEntry,
   type EducationEntry,
+  type GradeColumn,
+  type GradeScale,
+  type SummaryMode,
   type LanguageEntry,
   type Header,
 } from "./data";
+
+// Compute average percentage from a list of courses given a mode. Skips courses with missing/invalid grade or ECTS.
+// Returns { avg, isRaw } where isRaw=true means avg is a raw grade value (not a percentage)
+function computeAvgPct(
+  courses: { grade: string; ects: string }[],
+  scale: GradeScale,
+  scaleMax: string | undefined,
+  mode: SummaryMode,
+): { avg: number; isRaw: boolean } | null {
+  if (scale === "none") {
+    // No scale: average raw numeric grade values
+    const vals = courses
+      .map((c) => ({ val: parseFloat(c.grade), ects: parseFloat(c.ects) }));
+    const withGrade = vals.filter((x) => !isNaN(x.val));
+    if (withGrade.length === 0) return null;
+    const simple = withGrade.reduce((s, x) => s + x.val, 0) / withGrade.length;
+    const withEcts = withGrade.filter((x) => !isNaN(x.ects) && x.ects > 0);
+    const weighted = withEcts.length > 0
+      ? withEcts.reduce((s, x) => s + x.val * x.ects, 0) / withEcts.reduce((s, x) => s + x.ects, 0)
+      : null;
+    if (mode === "weighted") return { avg: weighted ?? simple, isRaw: true };
+    if (mode === "simple") return { avg: simple, isRaw: true };
+    // best: higher of weighted and simple
+    return { avg: Math.max(simple, weighted ?? simple), isRaw: true };
+  }
+  const valid = courses
+    .map((c) => ({ pct: gradeToPercentNum(c.grade, scale, scaleMax), ects: parseFloat(c.ects) }))
+    .filter((x): x is { pct: number; ects: number } => x.pct !== null && !isNaN(x.ects));
+  const validAll = courses
+    .map((c) => gradeToPercentNum(c.grade, scale, scaleMax))
+    .filter((x): x is number => x !== null);
+  if (validAll.length === 0) return null;
+  const simple = validAll.reduce((s, x) => s + x, 0) / validAll.length;
+  const totalEcts = valid.reduce((s, x) => s + x.ects, 0);
+  const weighted = totalEcts > 0
+    ? valid.reduce((s, x) => s + x.pct * x.ects, 0) / totalEcts
+    : null;
+  if (mode === "simple") return { avg: simple, isRaw: false };
+  if (mode === "weighted") return { avg: weighted ?? simple, isRaw: false };
+  // best: higher of weighted and simple
+  return { avg: Math.max(simple, weighted ?? simple), isRaw: false };
+}
+
+// For numeric scales (gpa, percent, linear), compute average directly in scale space
+// to avoid step-function snapping. Returns null for step-based scales (danish, ects).
+function computeDirectAvg(
+  courses: { grade: string; ects: string }[],
+  scale: GradeScale,
+  mode: SummaryMode,
+): number | null {
+  if (scale !== "gpa" && scale !== "percent" && scale !== "linear" && scale !== "danish") return null;
+  const vals = courses
+    .map((c) => ({ val: parseFloat(c.grade), ects: parseFloat(c.ects) }))
+    .filter((x) => !isNaN(x.val));
+  if (vals.length === 0) return null;
+  const simple = vals.reduce((s, x) => s + x.val, 0) / vals.length;
+  const withEcts = vals.filter((x) => !isNaN(x.ects) && x.ects > 0);
+  const weighted = withEcts.length > 0
+    ? withEcts.reduce((s, x) => s + x.val * x.ects, 0) / withEcts.reduce((s, x) => s + x.ects, 0)
+    : null;
+  if (mode === "simple") return simple;
+  if (mode === "weighted") return weighted ?? simple;
+  return Math.max(simple, weighted ?? simple); // best
+}
+
+function formatDirectAvg(avg: number, scale: GradeScale): string {
+  if (scale === "percent") return avg.toFixed(1) + "%";
+  return avg.toFixed(2);
+}
+
+function gradeToPercentNum(grade: string, scale: GradeScale, scaleMax?: string): number | null {
+  if (scale === "none") return null;
+  if (scale === "ects") {
+    // Upper bound of each ECTS percentage range
+    const upper: Record<string, number> = { A: 100, B: 89, C: 79, D: 69, E: 59, FX: 49, F: 39 };
+    return upper[grade.trim().toUpperCase()] ?? null;
+  }
+  const g = parseFloat(grade);
+  if (isNaN(g)) return null;
+  if (scale === "danish") {
+    // Upper bound of each Danish grade's percentage range
+    if (g <= -3) return 0;
+    const steps: [number, number][] = [[0, 49], [2, 59], [4, 69], [7, 79], [10, 89], [12, 100]];
+    const snapped = steps.find(([s]) => s >= g) ?? steps[steps.length - 1];
+    return snapped[1];
+  }
+  if (scale === "percent") return g;
+  if (scale === "gpa") {
+    // Upper bound of each GPA percentage range
+    if (g < 1.0) return 59; // F: 0-59%
+    const steps: [number, number][] = [[1.0, 66], [1.3, 69], [1.7, 72], [2.0, 76], [2.3, 79], [2.7, 83], [3.0, 86], [3.3, 89], [3.7, 93], [4.0, 100]];
+    const found = steps.find(([gpa]) => gpa >= g) ?? steps[steps.length - 1];
+    return found[1];
+  }
+  if (scale === "linear") {
+    const max = parseFloat(scaleMax ?? "10");
+    if (isNaN(max) || max === 0) return null;
+    return (g / max) * 100;
+  }
+  return null;
+}
+
+// Convert a percentage (0–100) to a grade string in the target scale.
+function percentToGrade(pct: number, scale: Exclude<GradeScale, "none">, scaleMax?: string): string {
+  if (scale === "percent") return pct.toFixed(1) + "%";
+  if (scale === "danish") {
+    if (pct >= 90) return "12";
+    if (pct >= 80) return "10";
+    if (pct >= 70) return "7";
+    if (pct >= 60) return "4";
+    if (pct >= 50) return "02";
+    if (pct >= 40) return "00";
+    return "-3";
+  }
+  if (scale === "ects") {
+    if (pct >= 90) return "A";
+    if (pct >= 80) return "B";
+    if (pct >= 70) return "C";
+    if (pct >= 60) return "D";
+    if (pct >= 50) return "E";
+    if (pct >= 40) return "FX";
+    return "F";
+  }
+  if (scale === "gpa") {
+    // Linear interpolation between GPA breakpoints
+    const pts: [number, number][] = [[0, 0.0], [60, 1.0], [67, 1.3], [70, 1.7], [73, 2.0], [77, 2.3], [80, 2.7], [83, 3.0], [87, 3.3], [90, 3.7], [94, 4.0], [100, 4.0]];
+    if (pct <= 0) return "0.00";
+    if (pct >= 100) return "4.00";
+    const hiIdx = pts.findIndex(([p]) => p >= pct);
+    const lo = pts[hiIdx - 1], hi = pts[hiIdx];
+    const t = (pct - lo[0]) / (hi[0] - lo[0]);
+    return (lo[1] + t * (hi[1] - lo[1])).toFixed(2);
+  }
+  if (scale === "linear") {
+    const max = parseFloat(scaleMax ?? "10");
+    if (isNaN(max)) return "—";
+    return ((pct / 100) * max).toFixed(1);
+  }
+  return "—";
+}
+
+// Column header label for a given scale.
+function colLabel(scale: Exclude<GradeScale, "none">, scaleMax?: string): string {
+  if (scale === "percent") return "%";
+  if (scale === "danish") return "DK";
+  if (scale === "ects") return "EU";
+  if (scale === "gpa") return "GPA";
+  if (scale === "linear") return "/" + (scaleMax ?? "?");
+  return "";
+}
 
 function App() {
   const [editing, setEditing] = useState(false);
@@ -139,7 +292,22 @@ function App() {
         if (d.about) setAbout(d.about);
         if (d.skills) setSkills(d.skills);
         if (d.exp) setExp(d.exp);
-        if (d.edu) setEdu(d.edu);
+        if (d.edu) setEdu(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (d.edu as any[]).map((entry: any) => {
+            // Migrate old gradeScale/gradeScaleMax to new gradeInputScale/gradeColumns
+            if (entry.gradeScale && entry.gradeScale !== "none" && !entry.gradeInputScale) {
+              const migrated = { ...entry, gradeInputScale: entry.gradeScale, gradeInputScaleMax: entry.gradeScaleMax, gradeColumns: [{ scale: "percent" }] };
+              delete migrated.gradeScale;
+              delete migrated.gradeScaleMax;
+              return migrated;
+            }
+            const clean = { ...entry };
+            delete clean.gradeScale;
+            delete clean.gradeScaleMax;
+            return clean;
+          })
+        );
         if (d.langs) setLangs(d.langs);
         if (d.sectionOrder) setSectionOrder(d.sectionOrder);
         if (d.theme) setTheme(d.theme);
@@ -186,15 +354,18 @@ document.addEventListener('DOMContentLoaded', function () {
     var rows = Array.from(tbody.querySelectorAll('tr'));
     var tfoot = wrap.querySelector('tfoot');
     if (rows.length <= PREVIEW) return;
-    rows.slice(PREVIEW).forEach(function (r) { r.style.display = 'none'; });
-    if (tfoot) tfoot.style.display = 'none';
+    // Set thead height variable for max-height offset
+    var thead = wrap.querySelector('thead');
+    if (thead && tableWrap) tableWrap.style.setProperty('--cv-thead-h', thead.offsetHeight + 'px');
+    rows.slice(PREVIEW).forEach(function (r) { r.style.visibility = 'collapse'; });
+    if (tfoot) tfoot.style.visibility = 'collapse';
     if (tableWrap) tableWrap.classList.add('cv-courses-table-wrap--fading');
     btn.textContent = btn.dataset.labelMore;
     var expanded = false;
     btn.addEventListener('click', function () {
       expanded = !expanded;
-      rows.slice(PREVIEW).forEach(function (r) { r.style.display = expanded ? '' : 'none'; });
-      if (tfoot) tfoot.style.display = expanded ? '' : 'none';
+      rows.slice(PREVIEW).forEach(function (r) { r.style.visibility = expanded ? '' : 'collapse'; });
+      if (tfoot) tfoot.style.visibility = expanded ? '' : 'collapse';
       if (tableWrap) tableWrap.classList.toggle('cv-courses-table-wrap--fading', !expanded);
       btn.textContent = expanded ? btn.dataset.labelLess : btn.dataset.labelMore;
     });
@@ -274,21 +445,40 @@ document.addEventListener('DOMContentLoaded', function () {
           if (e.period) lines.push(`*${e.period}*`);
           if (e.description) lines.push(`\n${e.description}`);
           if (e.courses && e.courses.some((c) => c.name.trim())) {
-            lines.push(`\n| # | Course | ECTS | Grade |`);
-            lines.push(`| --- | --- | --- | --- |`);
+            const cols = (e.gradeInputScale && e.gradeInputScale !== "none" && e.gradeColumns?.length)
+              ? e.gradeColumns : [];
+            const extraHeaders = cols.map((col) => ` ${colLabel(col.scale, col.scaleMax)} |`).join("");
+            const extraSep = cols.map(() => " --- |").join("");
+            lines.push(`\n| # | Course | ECTS | Grade |${extraHeaders}`);
+            lines.push(`| --- | --- | --- | --- |${extraSep}`);
             for (const c of e.courses)
-              if (c.name.trim())
-                lines.push(`| ${c.number} | ${c.name} | ${c.ects} | ${c.grade} |`);
+              if (c.name.trim()) {
+                const extraCells = cols.map((col) => {
+                  const pct = gradeToPercentNum(c.grade, e.gradeInputScale!, e.gradeInputScaleMax);
+                  return ` ${pct !== null ? percentToGrade(pct, col.scale, col.scaleMax) : ""} |`;
+                }).join("");
+                lines.push(`| ${c.number} | ${c.name} | ${c.ects} | ${c.grade} |${extraCells}`);
+              }
             if (e.showCourseSummary) {
-              const filled = e.courses.filter((c) => c.name.trim());
+              const filled = e.courses.filter((c) => c.name.trim() && (!e.showOnlyGraded || c.grade.trim()));
               const totalEcts = filled.reduce((sum, c) => {
                 const n = parseFloat(c.ects); return sum + (isNaN(n) ? 0 : n);
               }, 0);
-              const graded = filled.filter((c) => !isNaN(parseFloat(c.grade)) && !isNaN(parseFloat(c.ects)));
-              const weightedSum = graded.reduce((sum, c) => sum + parseFloat(c.grade) * parseFloat(c.ects), 0);
-              const weightedEcts = graded.reduce((sum, c) => sum + parseFloat(c.ects), 0);
-              const gpa = weightedEcts > 0 ? weightedSum / weightedEcts : null;
-              lines.push(`| | **Total** | **${totalEcts}** | **${gpa !== null ? gpa.toFixed(2) : "—"}** |`);
+              const mode = e.summaryMode ?? "weighted";
+              const avgResult = computeAvgPct(filled, e.gradeInputScale ?? "none", e.gradeInputScaleMax, mode);
+              const avgPct = avgResult && !avgResult.isRaw ? avgResult.avg : null;
+              const directAvg = computeDirectAvg(filled, e.gradeInputScale ?? "none", mode);
+              const avgGradeStr = directAvg !== null
+                ? formatDirectAvg(directAvg, e.gradeInputScale!)
+                : avgResult
+                  ? (avgResult.isRaw
+                    ? avgResult.avg.toFixed(2)
+                    : percentToGrade(avgResult.avg, e.gradeInputScale as Exclude<GradeScale, "none">, e.gradeInputScaleMax))
+                  : "—";
+              const extraSumCells = cols.map((col) =>
+                ` **${avgPct !== null ? percentToGrade(avgPct, col.scale, col.scaleMax) : "—"}** |`
+              ).join("");
+              lines.push(`| | **Total** | **${totalEcts}** | **${avgGradeStr}** |${extraSumCells}`);
             }
           }
         }
@@ -917,47 +1107,80 @@ document.addEventListener('DOMContentLoaded', function () {
                             <>
                               {(() => {
                                 const PREVIEW = 4;
-                                const filled = e.courses!.filter((c) => c.name.trim());
+                                const filled = e.courses!.filter((c) => c.name.trim() && (!e.showOnlyGraded || c.grade.trim()));
                                 const expanded = expandedCourses.has(i);
-                                const visible = expanded ? filled : filled.slice(0, PREVIEW);
                                 const hasMore = filled.length > PREVIEW;
+                                const cols = (e.gradeInputScale && e.gradeInputScale !== "none" && e.gradeColumns?.length)
+                                  ? e.gradeColumns : [];
                                 return (
                                   <div className="cv-courses-wrap">
-                                    <div className={`cv-courses-table-wrap${!expanded && hasMore ? " cv-courses-table-wrap--fading" : ""}`}>
+                                    <div className={`cv-courses-table-wrap${!expanded && hasMore ? " cv-courses-table-wrap--fading" : ""}`}
+                                      ref={(el) => {
+                                        if (el) {
+                                          const thead = el.querySelector('thead') as HTMLElement | null;
+                                          if (thead) el.style.setProperty('--cv-thead-h', thead.offsetHeight + 'px');
+                                        }
+                                      }}
+                                    >
                                       <table className="cv-courses-table">
                                         <thead>
                                           <tr>
                                             <th>#</th>
+                                            <th className="cv-col-ects">ECTS</th>
                                             <th>Course</th>
-                                            <th>ECTS</th>
-                                            <th>Grade</th>
+                                            {e.gradeInputScale && e.gradeInputScale !== "none" ? (
+                                              <>
+                                                <th className="cv-col-grade-first">{colLabel(e.gradeInputScale as Exclude<GradeScale,"none">, e.gradeInputScaleMax)}</th>
+                                                {cols.map((col, ci) => (
+                                                  <th key={ci}>{colLabel(col.scale, col.scaleMax)}</th>
+                                                ))}
+                                              </>
+                                            ) : (
+                                              <th className="cv-col-grade-first">Grade</th>
+                                            )}
                                           </tr>
                                         </thead>
                                         <tbody>
-                                          {visible.map((c, ci) => (
-                                            <tr key={ci}>
+                                          {filled.map((c, ci) => (
+                                            <tr key={ci} style={(!expanded && ci >= PREVIEW) ? { visibility: "collapse" } : undefined}>
                                               <td>{c.number}</td>
+                                              <td className="cv-col-ects">{c.ects}</td>
                                               <td>{c.name}</td>
-                                              <td>{c.ects}</td>
-                                              <td>{c.grade}</td>
+                                              <td className="cv-col-grade-first">{c.grade}</td>
+                                              {cols.map((col, coli) => {
+                                                const pct = gradeToPercentNum(c.grade, e.gradeInputScale!, e.gradeInputScaleMax);
+                                                return <td key={coli}>{pct !== null ? percentToGrade(pct, col.scale, col.scaleMax) : ""}</td>;
+                                              })}
                                             </tr>
                                           ))}
                                         </tbody>
-                                        {(expanded || !hasMore) && e.showCourseSummary && (() => {
+                                        {e.showCourseSummary && (() => {
                                           const totalEcts = filled.reduce((sum, c) => {
                                             const n = parseFloat(c.ects);
                                             return sum + (isNaN(n) ? 0 : n);
                                           }, 0);
-                                          const graded = filled.filter((c) => !isNaN(parseFloat(c.grade)) && !isNaN(parseFloat(c.ects)));
-                                          const weightedSum = graded.reduce((sum, c) => sum + parseFloat(c.grade) * parseFloat(c.ects), 0);
-                                          const weightedEcts = graded.reduce((sum, c) => sum + parseFloat(c.ects), 0);
-                                          const gpa = weightedEcts > 0 ? weightedSum / weightedEcts : null;
+                                          const mode = e.summaryMode ?? "weighted";
+                                          const avgResult = computeAvgPct(filled, e.gradeInputScale ?? "none", e.gradeInputScaleMax, mode);
+                                          const avgPct = avgResult && !avgResult.isRaw ? avgResult.avg : null;
+                                          const directAvg = computeDirectAvg(filled, e.gradeInputScale ?? "none", mode);
+                                          const avgGradeStr = directAvg !== null
+                                            ? formatDirectAvg(directAvg, e.gradeInputScale!)
+                                            : avgResult
+                                              ? (avgResult.isRaw
+                                                ? avgResult.avg.toFixed(2)
+                                                : percentToGrade(avgResult.avg, e.gradeInputScale as Exclude<GradeScale, "none">, e.gradeInputScaleMax))
+                                              : "—";
+                                          const hidden = !expanded && hasMore;
                                           return (
-                                            <tfoot>
+                                            <tfoot style={hidden ? { visibility: "collapse" } : undefined}>
                                               <tr className="cv-courses-summary">
-                                                <td colSpan={2}>Total</td>
+                                                <td>Total</td>
                                                 <td>{totalEcts}</td>
-                                                <td>{gpa !== null ? gpa.toFixed(2) : "—"}</td>
+                                                <td />
+                                                <td>{avgGradeStr}</td>
+                                                {cols.map((col, coli) => (
+                                                  <td key={coli}>{avgPct !== null ? percentToGrade(avgPct, col.scale, col.scaleMax) : "—"}</td>
+                                                ))}
                                               </tr>
                                             </tfoot>
                                           );
@@ -1117,6 +1340,41 @@ document.addEventListener('DOMContentLoaded', function () {
                                 }>
                                 <Plus size={12} /> Add course
                               </button>
+                              {e.showCourseSummary && (() => {
+                                const filledEdit = (e.courses ?? []).filter((c) => c.name.trim());
+                                const totalEcts = filledEdit.reduce((s, c) => { const n = parseFloat(c.ects); return s + (isNaN(n) ? 0 : n); }, 0);
+                                const mode = e.summaryMode ?? "weighted";
+                                const avgResult = computeAvgPct(filledEdit, e.gradeInputScale ?? "none", e.gradeInputScaleMax, mode);
+                                const directAvg = computeDirectAvg(filledEdit, e.gradeInputScale ?? "none", mode);
+                                const avgGradeStr = directAvg !== null
+                                  ? formatDirectAvg(directAvg, e.gradeInputScale!)
+                                  : avgResult
+                                    ? (avgResult.isRaw ? avgResult.avg.toFixed(2) : percentToGrade(avgResult.avg, e.gradeInputScale as Exclude<GradeScale, "none">, e.gradeInputScaleMax))
+                                    : "—";
+                                return (
+                                  <div className="cv-courses-edit-summary">
+                                    <span>Total</span>
+                                    <span>{totalEcts || "—"}</span>
+                                    <span>{avgGradeStr}</span>
+                                  </div>
+                                );
+                              })()}
+                              <label className="cv-courses-summary-toggle">
+                                <input
+                                  type="checkbox"
+                                  checked={e.showOnlyGraded ?? false}
+                                  onChange={(v) =>
+                                    setEdu((x) =>
+                                      x.map((r, j) =>
+                                        j === i
+                                          ? { ...r, showOnlyGraded: v.target.checked }
+                                          : r,
+                                      ),
+                                    )
+                                  }
+                                />
+                                Only show graded courses
+                              </label>
                               <label className="cv-courses-summary-toggle">
                                 <input
                                   type="checkbox"
@@ -1133,6 +1391,134 @@ document.addEventListener('DOMContentLoaded', function () {
                                 />
                                 Show totals row
                               </label>
+                              {e.showCourseSummary && (
+                                <div className="cv-courses-scale-row">
+                                  <span className="cv-courses-scale-label">Average</span>
+                                  <select
+                                    className="cv-courses-scale-select"
+                                    value={e.summaryMode ?? "weighted"}
+                                    onChange={(v) =>
+                                      setEdu((x) =>
+                                        x.map((r, j) =>
+                                          j === i
+                                            ? { ...r, summaryMode: v.target.value as SummaryMode }
+                                            : r,
+                                        ),
+                                      )
+                                    }>
+                                    <option value="weighted">Weighted by ECTS</option>
+                                    <option value="simple">Simple average</option>
+                                    <option value="best">Best of weighted/simple</option>
+                                  </select>
+                                </div>
+                              )}
+                              {/* Input grade scale */}
+                              <div className="cv-courses-scale-row">
+                                <span className="cv-courses-scale-label">Input scale</span>
+                                <select
+                                  className="cv-courses-scale-select"
+                                  value={e.gradeInputScale ?? "none"}
+                                  onChange={(v) =>
+                                    setEdu((x) =>
+                                      x.map((r, j) =>
+                                        j === i
+                                          ? { ...r, gradeInputScale: v.target.value as GradeScale }
+                                          : r,
+                                      ),
+                                    )
+                                  }>
+                                  <option value="none">— Not set —</option>
+                                  <option value="danish">Danish 7-point (−3 to 12)</option>
+                                  <option value="ects">EU/ECTS grade (A–F)</option>
+                                  <option value="gpa">GPA 0–4</option>
+                                  <option value="percent">Percentage (0–100)</option>
+                                  <option value="linear">Linear (0–max)</option>
+                                </select>
+                                {e.gradeInputScale === "linear" && (
+                                  <input
+                                    className="edit-inline cv-courses-scale-max"
+                                    value={e.gradeInputScaleMax ?? ""}
+                                    onChange={(v) =>
+                                      setEdu((x) =>
+                                        x.map((r, j) =>
+                                          j === i ? { ...r, gradeInputScaleMax: v.target.value } : r,
+                                        ),
+                                      )
+                                    }
+                                    placeholder="Max grade"
+                                  />
+                                )}
+                              </div>
+                              {/* Extra grade columns */}
+                              {e.gradeInputScale && e.gradeInputScale !== "none" && (
+                                <div className="cv-courses-col-list">
+                                  {(e.gradeColumns ?? []).map((col, ci) => (
+                                    <div key={ci} className="cv-courses-col-item">
+                                      <span className="cv-courses-scale-label">Column</span>
+                                      <select
+                                        className="cv-courses-scale-select"
+                                        value={col.scale}
+                                        onChange={(v) =>
+                                          setEdu((x) =>
+                                            x.map((r, j) =>
+                                              j === i
+                                                ? { ...r, gradeColumns: (r.gradeColumns ?? []).map((c, k) => k === ci ? { ...c, scale: v.target.value as GradeColumn["scale"] } : c) }
+                                                : r,
+                                            ),
+                                          )
+                                        }>
+                                        <option value="percent">% (Percentage)</option>
+                                        <option value="danish">DK (Danish 7-point)</option>
+                                        <option value="ects">EU/ECTS grade (A–F)</option>
+                                        <option value="gpa">GPA</option>
+                                        <option value="linear">Linear (0–max)</option>
+                                      </select>
+                                      {col.scale === "linear" && (
+                                        <input
+                                          className="edit-inline cv-courses-scale-max"
+                                          value={col.scaleMax ?? ""}
+                                          onChange={(v) =>
+                                            setEdu((x) =>
+                                              x.map((r, j) =>
+                                                j === i
+                                                  ? { ...r, gradeColumns: (r.gradeColumns ?? []).map((c, k) => k === ci ? { ...c, scaleMax: v.target.value } : c) }
+                                                  : r,
+                                              ),
+                                            )
+                                          }
+                                          placeholder="Max"
+                                        />
+                                      )}
+                                      <button
+                                        className="edit-remove-icon"
+                                        onClick={() =>
+                                          setEdu((x) =>
+                                            x.map((r, j) =>
+                                              j === i
+                                                ? { ...r, gradeColumns: (r.gradeColumns ?? []).filter((_, k) => k !== ci) }
+                                                : r,
+                                            ),
+                                          )
+                                        }>
+                                        <X size={10} />
+                                      </button>
+                                    </div>
+                                  ))}
+                                  <button
+                                    className="edit-add-inline"
+                                    onClick={() =>
+                                      setEdu((x) =>
+                                        x.map((r, j) =>
+                                          j === i
+                                            ? { ...r, gradeColumns: [...(r.gradeColumns ?? []), { scale: "percent" as const }] }
+                                            : r,
+                                        ),
+                                      )
+                                    }>
+                                    <Plus size={12} /> Add grade column
+                                  </button>
+                                </div>
+                              )}
                             </>
                           )}
                         </div>
