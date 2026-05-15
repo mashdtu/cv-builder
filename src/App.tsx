@@ -338,11 +338,18 @@ function App() {
     "languages",
   ]);
 
-  const [theme, setTheme] = useState({
+  const [theme, setTheme] = useState<{
+    accent: string;
+    bg: string;
+    text: string;
+    font: string;
+    layout: "classic" | "compact" | "sidebar";
+  }>({
     accent: "",
     bg: "",
     text: "",
     font: "system-ui, 'Segoe UI', Roboto, sans-serif",
+    layout: "classic",
   });
   const [showTheme, setShowTheme] = useState(false);
   const themeRef = useRef<HTMLDivElement>(null);
@@ -798,6 +805,19 @@ document.addEventListener('DOMContentLoaded', function () {
                       </option>
                     </select>
                   </label>
+                  <div className="edit-theme-row edit-theme-row--col">
+                    <span>Layout</span>
+                    <div className="edit-theme-layout-btns">
+                      {(["classic", "compact", "sidebar"] as const).map((l) => (
+                        <button
+                          key={l}
+                          className={`edit-theme-layout-btn${theme.layout === l ? " edit-theme-layout-btn--active" : ""}`}
+                          onClick={() => setTheme((t) => ({ ...t, layout: l }))}>
+                          {l.charAt(0).toUpperCase() + l.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -805,7 +825,7 @@ document.addEventListener('DOMContentLoaded', function () {
         )}
       </div>
 
-      <div className={`cv${editing ? " cv--editing" : ""}`} style={themeVars}>
+      <div className={`cv cv--layout-${theme.layout}${editing ? " cv--editing" : ""}`} style={themeVars}>
         {/* ── Header ──────────────────────────────────────────── */}
         <header className="cv-header">
           <h1>
