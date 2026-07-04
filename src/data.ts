@@ -17,6 +17,15 @@ export interface CourseEntry {
   grade: string;
 }
 
+export type GradeScale = "none" | "danish" | "ects" | "gpa" | "percent" | "linear";
+
+export interface GradeColumn {
+  scale: Exclude<GradeScale, "none">;
+  scaleMax?: string;
+}
+
+export type SummaryMode = "weighted" | "simple" | "best";
+
 export interface EducationEntry {
   degree: string;
   institution: string;
@@ -24,6 +33,12 @@ export interface EducationEntry {
   description?: string;
   courses?: CourseEntry[];
   showCourseSummary?: boolean;
+  showOnlyGraded?: boolean;
+  summaryMode?: SummaryMode;
+  gradeInputScale?: GradeScale;
+  gradeInputScaleMax?: string;
+  gradeColumns?: GradeColumn[];
+  colorGrades?: boolean;
 }
 
 export interface Header {
