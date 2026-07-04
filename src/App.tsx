@@ -38,18 +38,6 @@ import {
   type Header,
 } from "./data";
 
-<<<<<<< HEAD
-// Converts a weighted-average Danish grade (7-point scale) to the EU/ECTS letter grade.
-// Boundaries are midpoints between adjacent Danish grades.
-function danishGpaToEU(gpa: number): string {
-  if (gpa >= 11)    return "A";
-  if (gpa >= 8.5)   return "B";
-  if (gpa >= 5.5)   return "C";
-  if (gpa >= 3)     return "D";
-  if (gpa >= 1)     return "E";
-  if (gpa >= -1.5)  return "Fx";
-  return "F";
-=======
 // Compute average percentage from a list of courses given a mode. Skips courses with missing/invalid grade or ECTS.
 // Returns { avg, isRaw } where isRaw=true means avg is a raw grade value (not a percentage)
 function computeAvgPct(
@@ -330,7 +318,6 @@ function colLabel(scale: Exclude<GradeScale, "none">, scaleMax?: string): string
   if (scale === "gpa") return "GPA";
   if (scale === "linear") return "/" + (scaleMax ?? "?");
   return "";
->>>>>>> ba98b9dfd112874c43f64050d105b02526b5d097
 }
 
 function App() {
@@ -616,14 +603,6 @@ document.addEventListener('DOMContentLoaded', function () {
               const totalEcts = filled.reduce((sum, c) => {
                 const n = parseFloat(c.ects); return sum + (isNaN(n) ? 0 : n);
               }, 0);
-<<<<<<< HEAD
-              const graded = filled.filter((c) => !isNaN(parseFloat(c.grade)) && !isNaN(parseFloat(c.ects)));
-              const weightedSum = graded.reduce((sum, c) => sum + parseFloat(c.grade) * parseFloat(c.ects), 0);
-              const weightedEcts = graded.reduce((sum, c) => sum + parseFloat(c.ects), 0);
-              const gpa = weightedEcts > 0 ? weightedSum / weightedEcts : null;
-              const euGrade = gpa !== null ? danishGpaToEU(gpa) : null;
-              lines.push(`| | **Total** | **${totalEcts}** | **${gpa !== null ? `${gpa.toFixed(2)} (${euGrade})` : "—"}** |`);
-=======
               const mode = e.summaryMode ?? "weighted";
               const avgResult = computeAvgPct(filled, e.gradeInputScale ?? "none", e.gradeInputScaleMax, mode);
               const directAvg = computeDirectAvg(filled, e.gradeInputScale ?? "none", mode);
@@ -638,7 +617,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 ` **${computeColAvg(filled, e.gradeInputScale ?? "none", e.gradeInputScaleMax, col, mode)}** |`
               ).join("");
               lines.push(`| | **Total** | **${totalEcts}** | **${avgGradeStr}** |${extraSumCells}`);
->>>>>>> ba98b9dfd112874c43f64050d105b02526b5d097
             }
           }
         }
@@ -1332,13 +1310,6 @@ document.addEventListener('DOMContentLoaded', function () {
                                             const n = parseFloat(c.ects);
                                             return sum + (isNaN(n) ? 0 : n);
                                           }, 0);
-<<<<<<< HEAD
-                                          const graded = filled.filter((c) => !isNaN(parseFloat(c.grade)) && !isNaN(parseFloat(c.ects)));
-                                          const weightedSum = graded.reduce((sum, c) => sum + parseFloat(c.grade) * parseFloat(c.ects), 0);
-                                          const weightedEcts = graded.reduce((sum, c) => sum + parseFloat(c.ects), 0);
-                                          const gpa = weightedEcts > 0 ? weightedSum / weightedEcts : null;
-                                          const euGrade = gpa !== null ? danishGpaToEU(gpa) : null;
-=======
                                           const mode = e.summaryMode ?? "weighted";
                                           const avgResult = computeAvgPct(filled, e.gradeInputScale ?? "none", e.gradeInputScaleMax, mode);
                                           const directAvg = computeDirectAvg(filled, e.gradeInputScale ?? "none", mode);
@@ -1350,22 +1321,17 @@ document.addEventListener('DOMContentLoaded', function () {
                                                 : percentToGrade(avgResult.avg, e.gradeInputScale as Exclude<GradeScale, "none">, e.gradeInputScaleMax))
                                               : "—";
                                           const hidden = !expanded && hasMore;
->>>>>>> ba98b9dfd112874c43f64050d105b02526b5d097
                                           return (
                                             <tfoot style={hidden ? { visibility: "collapse" } : undefined}>
                                               <tr className="cv-courses-summary">
                                                 <td>Total</td>
                                                 <td>{totalEcts}</td>
-<<<<<<< HEAD
-                                                <td>{gpa !== null ? `${gpa.toFixed(2)} (${euGrade})` : "—"}</td>
-=======
                                                 <td />
                                                 <td style={{ color: e.colorGrades && avgGradeStr !== "—" ? gradeColor(avgGradeStr, e.gradeInputScale as GradeScale ?? "none", e.gradeInputScaleMax) : undefined, fontWeight: e.colorGrades && avgGradeStr !== "—" ? 600 : undefined }}>{avgGradeStr}</td>
                                                 {cols.map((col, coli) => {
                                                   const colAvg = computeColAvg(filled, e.gradeInputScale ?? "none", e.gradeInputScaleMax, col, mode);
                                                   return <td key={coli} style={{ color: e.colorGrades && colAvg !== "—" ? gradeColor(colAvg, col.scale, col.scaleMax) : undefined, fontWeight: e.colorGrades && colAvg !== "—" ? 600 : undefined }}>{colAvg}</td>;
                                                 })}
->>>>>>> ba98b9dfd112874c43f64050d105b02526b5d097
                                               </tr>
                                             </tfoot>
                                           );
