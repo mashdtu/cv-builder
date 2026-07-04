@@ -144,6 +144,16 @@ function convertGrade(
       const found = pctSteps.find(([d]) => d >= g) ?? pctSteps[pctSteps.length - 1];
       return found[1].toFixed(1) + "%";
     }
+    // Direct official Danish → ECTS mapping (avoids wrong GPA→%→ECTS chain)
+    if (toScale === "ects") {
+      if (g >= 12) return "A";
+      if (g >= 10) return "B";
+      if (g >= 7)  return "C";
+      if (g >= 4)  return "D";
+      if (g >= 2)  return "E";
+      if (g >= 0)  return "FX";
+      return "F";
+    }
     const gpaVal = danishToGpaNum(grade);
     if (gpaVal === null) return "";
     return percentToGrade(gpaToPercent(gpaVal), toScale, toScaleMax);
