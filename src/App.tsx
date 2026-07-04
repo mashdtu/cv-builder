@@ -35,6 +35,18 @@ import {
   type Header,
 } from "./data";
 
+// Converts a weighted-average Danish grade (7-point scale) to the EU/ECTS letter grade.
+// Boundaries are midpoints between adjacent Danish grades.
+function danishGpaToEU(gpa: number): string {
+  if (gpa >= 11)    return "A";
+  if (gpa >= 8.5)   return "B";
+  if (gpa >= 5.5)   return "C";
+  if (gpa >= 3)     return "D";
+  if (gpa >= 1)     return "E";
+  if (gpa >= -1.5)  return "Fx";
+  return "F";
+}
+
 function App() {
   const [editing, setEditing] = useState(false);
   const [hdr, setHdr] = useState<Header>(defaultHeader);
@@ -288,7 +300,8 @@ document.addEventListener('DOMContentLoaded', function () {
               const weightedSum = graded.reduce((sum, c) => sum + parseFloat(c.grade) * parseFloat(c.ects), 0);
               const weightedEcts = graded.reduce((sum, c) => sum + parseFloat(c.ects), 0);
               const gpa = weightedEcts > 0 ? weightedSum / weightedEcts : null;
-              lines.push(`| | **Total** | **${totalEcts}** | **${gpa !== null ? gpa.toFixed(2) : "—"}** |`);
+              const euGrade = gpa !== null ? danishGpaToEU(gpa) : null;
+              lines.push(`| | **Total** | **${totalEcts}** | **${gpa !== null ? `${gpa.toFixed(2)} (${euGrade})` : "—"}** |`);
             }
           }
         }
@@ -952,12 +965,13 @@ document.addEventListener('DOMContentLoaded', function () {
                                           const weightedSum = graded.reduce((sum, c) => sum + parseFloat(c.grade) * parseFloat(c.ects), 0);
                                           const weightedEcts = graded.reduce((sum, c) => sum + parseFloat(c.ects), 0);
                                           const gpa = weightedEcts > 0 ? weightedSum / weightedEcts : null;
+                                          const euGrade = gpa !== null ? danishGpaToEU(gpa) : null;
                                           return (
                                             <tfoot>
                                               <tr className="cv-courses-summary">
                                                 <td colSpan={2}>Total</td>
                                                 <td>{totalEcts}</td>
-                                                <td>{gpa !== null ? gpa.toFixed(2) : "—"}</td>
+                                                <td>{gpa !== null ? `${gpa.toFixed(2)} (${euGrade})` : "—"}</td>
                                               </tr>
                                             </tfoot>
                                           );
