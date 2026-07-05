@@ -184,6 +184,18 @@ function computeColAvg(
       : null;
     const avg = mode === "simple" ? simple : mode === "weighted" ? (weighted ?? simple) : Math.max(simple, weighted ?? simple);
     if (fromScale === "danish") {
+      // For ECTS: round the average to the nearest Danish grade using official
+      // scale boundaries, then map directly. Avoids the GPA-interpolation path
+      // which shifts grades by one step (e.g. 6.64 → B instead of C).
+      if (toScale === "ects") {
+        if (avg >= 11)   return "A";
+        if (avg >= 8.5)  return "B";
+        if (avg >= 5.5)  return "C";
+        if (avg >= 3)    return "D";
+        if (avg >= 1)    return "E";
+        if (avg >= -1.5) return "FX";
+        return "F";
+      }
       const pts = DANISH_GPA;
       let gpa: number;
       if (avg <= pts[0][0]) gpa = pts[0][1];
