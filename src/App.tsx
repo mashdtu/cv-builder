@@ -351,6 +351,8 @@ function App() {
   const [exp, setExp] = useState<ExperienceEntry[]>(defaultExperience);
   const [edu, setEdu] = useState<EducationEntry[]>(defaultEducation);
   const [expandedCourses, setExpandedCourses] = useState<Set<number>>(new Set());
+  const courseDrag = useRef<{ eduIdx: number; courseIdx: number } | null>(null);
+  const [dragOverCourse, setDragOverCourse] = useState<{ eduIdx: number; courseIdx: number } | null>(null);
   const [langs, setLangs] = useState<LanguageEntry[]>(defaultLanguages);
   const [sectionOrder, setSectionOrder] = useState([
     "about",
@@ -384,6 +386,19 @@ function App() {
       [next[i], next[j]] = [next[j], next[i]];
       return next;
     });
+  }
+
+  function reorderCourse(eduIdx: number, fromIdx: number, toIdx: number) {
+    if (fromIdx === toIdx) return;
+    setEdu((x) =>
+      x.map((r, j) => {
+        if (j !== eduIdx) return r;
+        const courses = [...(r.courses ?? [])];
+        const [moved] = courses.splice(fromIdx, 1);
+        courses.splice(toIdx, 0, moved);
+        return { ...r, courses };
+      }),
+    );
   }
 
   async function saveJSON() {
@@ -1385,6 +1400,7 @@ document.addEventListener('DOMContentLoaded', function () {
                               <span className="cv-courses-label">Courses</span>
                               {(e.courses ?? []).length > 0 && (
                                 <div className="cv-courses-edit-header">
+                                  <span />
                                   <span>#</span>
                                   <span>Name</span>
                                   <span>ECTS</span>
@@ -1393,7 +1409,23 @@ document.addEventListener('DOMContentLoaded', function () {
                                 </div>
                               )}
                               {(e.courses ?? []).map((course, ci) => (
-                                <div key={ci} className="cv-courses-edit-row">
+                                <div
+                                  key={ci}
+                                  className={`cv-courses-edit-row${dragOverCourse?.eduIdx === i && dragOverCourse?.courseIdx === ci && courseDrag.current?.courseIdx !== ci ? " cv-courses-drop-target" : ""}`}
+                                  draggable
+                                  onDragStart={() => { courseDrag.current = { eduIdx: i, courseIdx: ci }; }}
+                                  onDragOver={(ev) => { ev.preventDefault(); if (courseDrag.current?.eduIdx === i) setDragOverCourse({ eduIdx: i, courseIdx: ci }); }}
+                                  onDragLeave={() => setDragOverCourse(null)}
+                                  onDrop={() => {
+                                    if (courseDrag.current && courseDrag.current.eduIdx === i)
+                                      reorderCourse(i, courseDrag.current.courseIdx, ci);
+                                    courseDrag.current = null;
+                                    setDragOverCourse(null);
+                                  }}
+                                  onDragEnd={() => { courseDrag.current = null; setDragOverCourse(null); }}>
+                                  <span className="cv-courses-drag-handle" title="Drag to reorder">
+                                    ⠿
+                                  </span>
                                   <input
                                     className="edit-inline cv-courses-num"
                                     value={course.number}
@@ -1526,6 +1558,7 @@ document.addEventListener('DOMContentLoaded', function () {
                                     : "—";
                                 return (
                                   <div className="cv-courses-edit-summary">
+                                    <span />
                                     <span>Total</span>
                                     <span>{totalEcts || "—"}</span>
                                     <span>{avgGradeStr}</span>
